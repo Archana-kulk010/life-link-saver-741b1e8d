@@ -73,6 +73,7 @@ const DashboardInner = () => {
     if (!user) return;
     loadProfile();
     loadMatches();
+    loadRareDonors();
 
     // Realtime: refresh matches when donor's matches change
     const channel = supabase
@@ -121,6 +122,16 @@ const DashboardInner = () => {
       .eq("donor_user_id", user.id)
       .order("notified_at", { ascending: false });
     if (data) setMatches(data as unknown as Match[]);
+  };
+
+  const loadRareDonors = async () => {
+    const { data } = await supabase
+      .from("donors")
+      .select("*")
+      .eq("is_available", true)
+      .eq("is_rare", true)
+      .order("created_at", { ascending: false });
+    if (data) setRareDonors(data as Donor[]);
   };
 
   const useMyLocation = async () => {
