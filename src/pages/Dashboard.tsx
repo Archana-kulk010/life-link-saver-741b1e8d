@@ -327,6 +327,52 @@ const DashboardInner = () => {
         </Card>
       )}
 
+      {/* Rare blood type donors */}
+      <Card className="mb-6 p-6 shadow-card">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-bold">
+              <Sparkles className="h-5 w-5 text-primary" /> Rare blood type heroes
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Bombay (HH), O−, AB− and B− donors — the hardest to find when every minute counts.
+            </p>
+          </div>
+          <Badge variant="outline" className="shrink-0">
+            {rareDonors.length} registered
+          </Badge>
+        </div>
+        {rareDonors.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No rare-type donors registered yet.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {rareDonors.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3"
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">{d.name}</div>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="h-3 w-3" /> {d.city}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xl font-bold text-primary">
+                    {d.blood_type === "Bombay" ? "HH" : d.blood_type}
+                  </div>
+                  {d.blood_type === "Bombay" && (
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Bombay
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Profile form */}
       <Card className="p-6 shadow-card md:p-8">
         <h2 className="mb-1 text-xl font-bold">{donor ? "Your donor profile" : "Complete your registration"}</h2>
