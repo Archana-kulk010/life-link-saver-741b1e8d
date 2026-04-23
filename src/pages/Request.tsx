@@ -23,8 +23,8 @@ import { BLOOD_TYPES, BloodType, compatibleDonorTypes, distanceKm, Urgency } fro
 import { getBrowserLocation } from "@/lib/geo";
 import { toast } from "sonner";
 
-// Blood types donors can donate (excludes Bombay since it's not in the basic dropdown spec)
-const REQUEST_BLOOD_TYPES = BLOOD_TYPES.filter((b) => b !== "Bombay");
+// All blood types selectable for emergency requests, including the rare Bombay (HH).
+const REQUEST_BLOOD_TYPES = BLOOD_TYPES;
 
 const Request = () => {
   const navigate = useNavigate();
@@ -181,7 +181,7 @@ const Request = () => {
                 <SelectContent>
                   {REQUEST_BLOOD_TYPES.map((bt) => (
                     <SelectItem key={bt} value={bt}>
-                      {bt}
+                      {bt === "Bombay" ? "Bombay (HH) — extremely rare" : bt}
                     </SelectItem>
                   ))}
                 </SelectContent>
