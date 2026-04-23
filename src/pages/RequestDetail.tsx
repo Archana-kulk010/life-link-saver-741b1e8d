@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/Navbar";
-import { DonorMap, MapDonor } from "@/components/DonorMap";
 import { supabase } from "@/integrations/supabase/client";
 import { compatibleDonorTypes, distanceKm, URGENCY_STYLES, BloodType } from "@/lib/blood";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,11 +29,19 @@ type RequestRow = {
   requester_user_id: string | null;
 };
 
+type NearbyDonor = {
+  id: string;
+  name: string;
+  blood_type: string;
+  city: string;
+  distance_km: number | null;
+};
+
 const RequestDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [req, setReq] = useState<RequestRow | null>(null);
-  const [donors, setDonors] = useState<MapDonor[]>([]);
+  const [donors, setDonors] = useState<NearbyDonor[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanding, setExpanding] = useState(false);
   const [secondsUntilExpand, setSecondsUntilExpand] = useState<number | null>(null);
@@ -87,27 +94,28 @@ const RequestDetail = () => {
         if (!d.last_donation_date) return true;
         return Date.now() - new Date(d.last_donation_date).getTime() >= 90 * 24 * 60 * 60 * 1000;
       });
-      const within =
-        req.latitude != null && req.longitude != null
-          ? eligible.filter(
-              (d) =>
-                d.latitude != null &&
-                d.longitude != null &&
-                distanceKm(req.latitude!, req.longitude!, d.latitude, d.longitude) <= req.search_radius_km,
-            )
-          : eligible;
-      setDonors(
-        within
-          .filter((d) => d.latitude != null && d.longitude != null)
-          .map((d) => ({
+      const mapped = eligible
+        .map((d) => {
+          const hasCoords = req.latitude != null && req.longitude != null && d.latitude != null && d.longitude != null;
+          const distance = hasCoords ? distanceKm(req.latitude, req.longitude, d.latitude, d.longitude) : null;
+
+          return {
             id: d.id,
             name: d.name,
             blood_type: d.blood_type as string,
             city: d.city,
-            latitude: d.latitude as number,
-            longitude: d.longitude as number,
-          })),
-      );
+            distance_km: distance,
+          };
+        })
+        .filter((d) => d.distance_km == null || d.distance_km <= req.search_radius_km)
+        .sort((a, b) => {
+          if (a.distance_km == null && b.distance_km == null) return a.name.localeCompare(b.name);
+          if (a.distance_km == null) return 1;
+          if (b.distance_km == null) return -1;
+          return a.distance_km - b.distance_km;
+        });
+
+      setDonors(mapped);
     })();
   }, [req, compatibleTypes]);
 
@@ -256,17 +264,35 @@ const RequestDetail = () => {
               )}
             </Card>
 
-            {req.latitude != null && req.longitude != null && (
-              <Card className="mt-6 overflow-hidden p-2 shadow-card">
-                <DonorMap
-                  center={{ lat: req.latitude, lng: req.longitude }}
-                  donors={donors}
-                  radiusKm={req.search_radius_km}
-                  hospital={{ lat: req.latitude, lng: req.longitude, label: req.hospital_name }}
-                  height="420px"
-                />
-              </Card>
-            )}
+            <Card className="mt-6 p-5 shadow-card">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                <Heart className="h-4 w-4 text-primary" /> Nearby donors
+              </div>
+
+              {donors.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No matching donors found within the current search radius.</p>
+              ) : (
+                <div className="space-y-3">
+                  {donors.map((donor) => (
+                    <div
+                      key={donor.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-secondary/40 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium">{donor.name}</div>
+                        <div className="text-sm text-muted-foreground">{donor.city}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-primary">{donor.blood_type}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {donor.distance_km == null ? "Distance unavailable" : `${donor.distance_km.toFixed(1)} km`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
           </div>
 
           <div className="space-y-4">
