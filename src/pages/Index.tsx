@@ -37,9 +37,9 @@ const Index = () => {
               Real-time emergency blood network
             </div>
             <h1 className="mb-6 text-4xl font-extrabold tracking-tight md:text-6xl">
-              Every drop counts.
-              <br />
               <span className="bg-gradient-hero bg-clip-text text-transparent">
+                Every drop counts.
+                <br />
                 Every minute matters.
               </span>
             </h1>
