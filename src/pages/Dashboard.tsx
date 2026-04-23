@@ -57,6 +57,7 @@ const DashboardInner = () => {
   const navigate = useNavigate();
   const [donor, setDonor] = useState<Donor | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [rareDonors, setRareDonors] = useState<Donor[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
