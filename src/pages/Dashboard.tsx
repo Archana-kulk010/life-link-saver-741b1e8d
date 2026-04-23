@@ -348,7 +348,7 @@ const DashboardInner = () => {
               <SelectContent>
                 {BLOOD_TYPES.map((bt) => (
                   <SelectItem key={bt} value={bt}>
-                    {bt} {isRare(bt as BloodType) && "✨ Rare"}
+                    {bt === "Bombay" ? "Bombay (HH)" : bt} {isRare(bt as BloodType) && "✨ Rare"}
                   </SelectItem>
                 ))}
               </SelectContent>
