@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Loader2, MapPin, Search, Heart, Sparkles } from "lucide-react";
+import { Loader2, MapPin, Search, Heart, Sparkles, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -13,9 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Navbar } from "@/components/Navbar";
-import { DonorMap, MapDonor } from "@/components/DonorMap";
 import { supabase } from "@/integrations/supabase/client";
-import { BLOOD_TYPES, BloodType, daysUntilEligible, isEligible } from "@/lib/blood";
+import { BLOOD_TYPES, BloodType, daysUntilEligible, distanceKm, isEligible } from "@/lib/blood";
 import { getBrowserLocation } from "@/lib/geo";
 import { toast } from "sonner";
 
@@ -54,7 +53,8 @@ const Donors = () => {
   }, []);
 
   const filtered = useMemo(() => {
-    return donors.filter((d) => {
+    return donors
+      .filter((d) => {
       if (bloodFilter !== "all" && d.blood_type !== bloodFilter) return false;
       if (showRareOnly && !d.is_rare) return false;
       if (city && !d.city.toLowerCase().includes(city.toLowerCase())) return false;
@@ -62,20 +62,22 @@ const Donors = () => {
         const q = search.toLowerCase();
         if (!d.name.toLowerCase().includes(q) && !d.city.toLowerCase().includes(q)) return false;
       }
-      return true;
-    });
+        return true;
+      })
+      .map((d) => ({
+        ...d,
+        distanceKm:
+          center && d.latitude != null && d.longitude != null
+            ? distanceKm(center.lat, center.lng, d.latitude, d.longitude)
+            : null,
+      }))
+      .sort((a, b) => {
+        if (a.distanceKm == null && b.distanceKm == null) return a.name.localeCompare(b.name);
+        if (a.distanceKm == null) return 1;
+        if (b.distanceKm == null) return -1;
+        return a.distanceKm - b.distanceKm;
+      });
   }, [donors, search, bloodFilter, city, showRareOnly]);
-
-  const mapDonors: MapDonor[] = filtered
-    .filter((d) => d.latitude != null && d.longitude != null)
-    .map((d) => ({
-      id: d.id,
-      name: d.name,
-      blood_type: d.blood_type,
-      city: d.city,
-      latitude: d.latitude!,
-      longitude: d.longitude!,
-    }));
 
   const useMyLocation = async () => {
     try {
@@ -85,9 +87,6 @@ const Donors = () => {
       toast.error("Could not get location");
     }
   };
-
-  // Default map center: India centroid if no location
-  const mapCenter = center ?? (mapDonors[0] ? { lat: mapDonors[0].latitude, lng: mapDonors[0].longitude } : { lat: 20.5937, lng: 78.9629 });
 
   return (
     <>
@@ -133,19 +132,19 @@ const Donors = () => {
           </div>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-          {/* Map */}
-          <Card className="overflow-hidden p-2 shadow-card">
-            <div className="mb-2 flex items-center justify-between px-2 pt-2">
-              <span className="text-sm font-semibold">Donor map</span>
-              <Button size="sm" variant="ghost" onClick={useMyLocation}>
-                <MapPin className="h-4 w-4" /> Center on me
-              </Button>
+        <div>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Nearby donors</h2>
+              <p className="text-sm text-muted-foreground">
+                {center ? "Sorted by distance from your current location." : "Allow location access to sort by nearest donor."}
+              </p>
             </div>
-            <DonorMap center={mapCenter} donors={mapDonors} height="500px" />
-          </Card>
+            <Button size="sm" variant="outline" onClick={useMyLocation}>
+              <LocateFixed className="h-4 w-4" /> Use my location
+            </Button>
+          </div>
 
-          {/* List */}
           <div>
             {loading ? (
               <div className="flex justify-center py-12">
@@ -180,6 +179,7 @@ const Donors = () => {
                             <span className="flex items-center gap-1">
                               <MapPin className="h-3 w-3" /> {d.city}
                             </span>
+                            <span>{d.distanceKm == null ? "Distance unavailable" : `${d.distanceKm.toFixed(1)} km away`}</span>
                             <span className={eligible ? "text-success" : "text-warning"}>
                               {eligible ? "Eligible now" : `Eligible in ${days}d`}
                             </span>
