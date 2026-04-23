@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, MapPin, AlertCircle, Heart } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,14 +18,15 @@ import {
   RadioGroupItem,
 } from "@/components/ui/radio-group";
 import { Navbar } from "@/components/Navbar";
-import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { BLOOD_TYPES, BloodType, compatibleDonorTypes, distanceKm, Urgency } from "@/lib/blood";
 import { getBrowserLocation } from "@/lib/geo";
 import { toast } from "sonner";
 
+// Blood types donors can donate (excludes Bombay since it's not in the basic dropdown spec)
+const REQUEST_BLOOD_TYPES = BLOOD_TYPES.filter((b) => b !== "Bombay");
+
 const Request = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
@@ -38,47 +39,24 @@ const Request = () => {
   const [units, setUnits] = useState(1);
   const [notes, setNotes] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [previewCount, setPreviewCount] = useState<number | null>(null);
 
-  const compatibleTypes = useMemo(
-    () => (bloodType ? compatibleDonorTypes(bloodType as BloodType) : []),
-    [bloodType],
-  );
-
+  // Silently fetch geolocation in the background
   useEffect(() => {
-    if (!bloodType || !coords) {
-      setPreviewCount(null);
-      return;
-    }
-    (async () => {
-      const { data } = await supabase
-        .from("donors")
-        .select("latitude, longitude, blood_type")
-        .in("blood_type", compatibleTypes)
-        .eq("is_available", true);
-      if (!data) return;
-      const within = data.filter(
-        (d) =>
-          d.latitude != null &&
-          d.longitude != null &&
-          distanceKm(coords.lat, coords.lng, d.latitude, d.longitude) <= 10,
-      );
-      setPreviewCount(within.length);
-    })();
-  }, [bloodType, coords, compatibleTypes]);
+    getBrowserLocation()
+      .then((c) => setCoords(c))
+      .catch(() => {
+        /* silent — user can still submit using the address field */
+      });
+  }, []);
 
-  const useMyLocation = async () => {
-    try {
-      const c = await getBrowserLocation();
-      setCoords(c);
-      toast.success("Location captured");
-    } catch {
-      toast.error("Could not get location. Enter coordinates manually if needed.");
-    }
-  };
-
-  const matchAndNotify = async (requestId: string, lat: number | null, lng: number | null, radiusKm: number) => {
+  const matchAndNotify = async (
+    requestId: string,
+    lat: number | null,
+    lng: number | null,
+    radiusKm: number,
+  ) => {
     if (!bloodType) return 0;
+    const compatibleTypes = compatibleDonorTypes(bloodType as BloodType);
     const { data: donors } = await supabase
       .from("donors")
       .select("id, user_id, latitude, longitude, blood_type, last_donation_date")
@@ -116,25 +94,23 @@ const Request = () => {
 
     const { error } = await supabase.from("request_matches").insert(rows);
     if (error) {
-      console.warn("Match insert blocked by RLS (expected for non-admin):", error.message);
+      console.warn("Match insert blocked by RLS:", error.message);
     }
     return matchedDonors.length;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      toast.error("Please sign in first to create a request.");
-      navigate("/auth?mode=signup");
+    if (!bloodType) {
+      toast.error("Please choose a blood type.");
       return;
     }
-    if (!bloodType) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("emergency_requests")
         .insert({
-          requester_user_id: user.id,
+          requester_user_id: null,
           patient_name: patientName,
           blood_type_needed: bloodType,
           hospital_name: hospitalName,
@@ -151,10 +127,15 @@ const Request = () => {
         .single();
       if (error) throw error;
 
-      const matched = await matchAndNotify(data.id, coords?.lat ?? null, coords?.lng ?? null, 10);
+      const matched = await matchAndNotify(
+        data.id,
+        coords?.lat ?? null,
+        coords?.lng ?? null,
+        10,
+      );
       toast.success(
         matched > 0
-          ? `Request created. ${matched} donor(s) being notified.`
+          ? `Request created. ${matched} compatible donor(s) found nearby.`
           : "Request created. We'll auto-expand the search if needed.",
       );
       navigate(`/request/${data.id}`);
@@ -175,7 +156,7 @@ const Request = () => {
           </div>
           <h1 className="text-3xl font-bold">Request blood now</h1>
           <p className="text-muted-foreground">
-            Fill this in under 60 seconds. Compatible donors within 10 km will be notified instantly.
+            No account needed. Compatible donors within 10 km will be notified instantly.
           </p>
         </div>
 
@@ -183,16 +164,22 @@ const Request = () => {
           <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="patient">Patient name</Label>
-              <Input id="patient" value={patientName} onChange={(e) => setPatientName(e.target.value)} required />
+              <Input
+                id="patient"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                required
+                maxLength={100}
+              />
             </div>
             <div className="space-y-2">
               <Label>Blood type needed</Label>
               <Select value={bloodType} onValueChange={(v) => setBloodType(v as BloodType)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select required blood type" />
+                  <SelectValue placeholder="Select blood type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {BLOOD_TYPES.map((bt) => (
+                  {REQUEST_BLOOD_TYPES.map((bt) => (
                     <SelectItem key={bt} value={bt}>
                       {bt}
                     </SelectItem>
@@ -203,7 +190,13 @@ const Request = () => {
 
             <div className="space-y-2">
               <Label htmlFor="hospital">Hospital name</Label>
-              <Input id="hospital" value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} required />
+              <Input
+                id="hospital"
+                value={hospitalName}
+                onChange={(e) => setHospitalName(e.target.value)}
+                required
+                maxLength={150}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="hospitalLocation">Hospital location / address</Label>
@@ -212,6 +205,8 @@ const Request = () => {
                 value={hospitalLocation}
                 onChange={(e) => setHospitalLocation(e.target.value)}
                 required
+                maxLength={250}
+                placeholder="Street, area, city"
               />
             </div>
 
@@ -252,6 +247,8 @@ const Request = () => {
                 placeholder="+91 9XXXXXXXXX"
                 value={contactPhone}
                 onChange={(e) => setContactPhone(e.target.value)}
+                required
+                maxLength={20}
               />
             </div>
             <div className="space-y-2">
@@ -263,27 +260,8 @@ const Request = () => {
                 max={20}
                 value={units}
                 onChange={(e) => setUnits(Number(e.target.value))}
+                required
               />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label>Hospital location pin</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" onClick={useMyLocation}>
-                  <MapPin className="h-4 w-4" /> Use current location
-                </Button>
-                {coords && (
-                  <span className="text-xs text-muted-foreground">
-                    {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
-                  </span>
-                )}
-                {previewCount !== null && (
-                  <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
-                    <Heart className="h-3 w-3 fill-success text-success" />
-                    {previewCount} compatible donor(s) within 10 km
-                  </span>
-                )}
-              </div>
             </div>
 
             <div className="space-y-2 md:col-span-2">
@@ -294,20 +272,21 @@ const Request = () => {
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Any extra details for donors"
                 rows={3}
+                maxLength={500}
               />
             </div>
 
             <div className="md:col-span-2">
-              <Button type="submit" size="lg" className="h-12 w-full shadow-medical md:w-auto" disabled={loading}>
+              <Button
+                type="submit"
+                size="lg"
+                className="h-12 w-full shadow-medical md:w-auto"
+                disabled={loading}
+              >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 <AlertCircle className="h-4 w-4" />
                 Send emergency request
               </Button>
-              {!user && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  You'll need to sign in first — it takes 10 seconds.
-                </p>
-              )}
             </div>
           </form>
         </Card>
