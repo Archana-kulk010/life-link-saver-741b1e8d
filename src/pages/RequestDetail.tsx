@@ -98,14 +98,14 @@ const RequestDetail = () => {
           : eligible;
       setDonors(
         within
-          .filter((d): d is MapDonor & { last_donation_date: string | null } => d.latitude != null && d.longitude != null)
+          .filter((d) => d.latitude != null && d.longitude != null)
           .map((d) => ({
             id: d.id,
             name: d.name,
-            blood_type: d.blood_type,
+            blood_type: d.blood_type as string,
             city: d.city,
-            latitude: d.latitude!,
-            longitude: d.longitude!,
+            latitude: d.latitude as number,
+            longitude: d.longitude as number,
           })),
       );
     })();
